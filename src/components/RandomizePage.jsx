@@ -51,46 +51,121 @@ const RandomizePage = ({ userRole, handleLogout }) => {
       return;
     }
 
-    let ridersClasses = {};
-    let horsesClasses = {};
-    for (let rider of ridersFile) {
-      if (!ridersClasses[rider['Class']]) {
-        ridersClasses[rider['Class']] = [];
+    try {
+      // Ensure that the data is parsed correctly
+      const parsedRiders = JSON.parse(JSON.stringify(ridersFile));
+      const parsedHorses = JSON.parse(JSON.stringify(horsesFile));
+
+      // Extract class names from filtered riders and horses data
+      const riderClassNames = [...new Set(parsedRiders.map((rider) => rider['Class']))]
+        .filter(Boolean); // Filter out undefined or empty class names
+      const horseClassNames = [...new Set(parsedHorses.map((horse) => horse['Class']))]
+        .filter(Boolean); // Filter out undefined or empty class names
+
+      console.log('Rider Class Names:', riderClassNames);
+      console.log('Horse Class Names:', horseClassNames);
+
+      // Combine all class names from both datasets
+      const allClassNames = [...new Set([...riderClassNames, ...horseClassNames])];
+
+      console.log('All Class Names:', allClassNames);
+
+      let results = [];
+      let showClassNumber = 1;
+
+      for (let classKey of allClassNames) {
+        let ridersInClass = parsedRiders.filter((rider) => rider['Class'] === classKey) || [];
+        let horsesInClass = parsedHorses.filter((horse) => horse['Class'] === classKey) || [];
+
+        console.log('Class Name:', classKey);
+        console.log('Riders Count:', ridersInClass.length);
+        console.log('Horses Count:', horsesInClass.length);
+
+        let classResult = [];
+        let uniqueHorsesUsed = new Set();
+        let overweightTRiders = [];
+        let underweightTRiders = [];
+
+        for (let rider of ridersInClass) {
+          // Check if the rider is overweight T or underweight T
+          if (rider['OverWeight'] === 'T') {
+            underweightTRiders.push(rider);
+          } else {
+            overweightTRiders.push(rider);
+          }
+        }
+
+        // Assign horses for underweight T riders
+        for (let rider of underweightTRiders) {
+          // Check if there are eligible "F" horses
+          let availableHorses = horsesInClass.filter(
+            (horse) => horse['UnderWeight'] === 'F'
+          );
+
+          // Filter out horses already assigned to overweight T riders
+          availableHorses = availableHorses.filter(
+            (horse) => !uniqueHorsesUsed.has(horse['Horse Name'])
+          );
+
+          if (availableHorses.length > 0) {
+            // Randomly select an "F" horse
+            const randomIndex = Math.floor(Math.random() * availableHorses.length);
+            const horse = availableHorses[randomIndex];
+
+            classResult.push({
+              Number: rider['ID'] || '',
+              'Rider Name': rider['Rider Name'] || '',
+              School: rider['School'] || '',
+              'Draw Order': classResult.length + 1,
+              'Horse Name': horse['Horse Name'] || '',
+            });
+
+            uniqueHorsesUsed.add(horse['Horse Name']);
+          }
+        }
+
+        // Assign horses for overweight T riders
+        for (let rider of overweightTRiders) {
+          // Check if there are eligible "F" or "T" horses
+          let availableHorses = horsesInClass.filter(
+            (horse) => horse['UnderWeight'] === 'F' || horse['UnderWeight'] === 'T'
+          );
+
+          // Filter out horses already assigned to other riders
+          availableHorses = availableHorses.filter(
+            (horse) => !uniqueHorsesUsed.has(horse['Horse Name'])
+          );
+
+          if (availableHorses.length > 0) {
+            // Randomly select a horse (either "F" or "T")
+            const randomIndex = Math.floor(Math.random() * availableHorses.length);
+            const horse = availableHorses[randomIndex];
+
+            classResult.push({
+              Number: rider['ID'] || '',
+              'Rider Name': rider['Rider Name'] || '',
+              School: rider['School'] || '',
+              'Draw Order': classResult.length + 1,
+              'Horse Name': horse['Horse Name'] || '',
+            });
+
+            uniqueHorsesUsed.add(horse['Horse Name']);
+          }
+        }
+
+        results.push({
+          className: `Show Class ${showClassNumber} ${classKey}`,
+          data: classResult,
+        });
+        showClassNumber++;
       }
-      ridersClasses[rider['Class']].push(rider);
+
+      console.log('Results:', results);
+
+      setTableData(results);
+    } catch (error) {
+      console.error('Error randomizing:', error);
     }
-    for (let horse of horsesFile) {
-      if (!horsesClasses[horse['Class']]) {
-        horsesClasses[horse['Class']] = [];
-      }
-      horsesClasses[horse['Class']].push(horse);
-    }
-
-    let results = [];
-    for (let classKey in ridersClasses) {
-      let ridersInClass = JSON.parse(JSON.stringify(ridersClasses[classKey]));
-      let horsesInClass = JSON.parse(JSON.stringify(horsesClasses[classKey]));
-
-      ridersInClass.sort(() => Math.random() - 0.5);
-      horsesInClass.sort(() => Math.random() - 0.5);
-
-      let classResult = ridersInClass.map((rider, index) => ({
-        Placing: index + 1,
-        Number: Math.floor(Math.random() * 1000),
-        'Rider Name': rider['Rider Name'],
-        School: rider['School'],
-        'Draw Order': index + 1, // Changed the draw order logic
-        'Horse Name': horsesInClass[index % horsesInClass.length]['Horse Name'], // Fixed the horse assignment logic
-        'Horse Provider': horsesInClass[index % horsesInClass.length]['Provider'], // Fixed the horse assignment logic
-      }));
-
-      results.push({
-        className: classKey,
-        data: classResult,
-      });
-    }
-
-    setTableData(results);
   };
 
   const handleDownloadTable = async () => {
@@ -98,47 +173,44 @@ const RandomizePage = ({ userRole, handleLogout }) => {
       console.error('Table is empty, cannot download');
       return;
     }
-
+  
     // Create a new ExcelJS workbook
     const workbook = new ExcelJS.Workbook();
-    const worksheet = workbook.addWorksheet('Sheet1');
-
-    // Define the table header
-    const header = [
-      'Class', // Add Class column
-      'Placing',
-      'Number',
-      'Rider Name',
-      'School',
-      'Draw Order',
-      'Horse Name',
-      'Horse Provider',
-    ];
-
-    // Add the header row to the worksheet
-    worksheet.addRow(header);
-
-    // Add data rows to the worksheet
-    tableData.forEach((result) => {
+  
+    // Create a single worksheet for all classes
+    const worksheet = workbook.addWorksheet('Randomized Results');
+  
+    // Add data from all classes to the worksheet
+    tableData.forEach((result, index) => {
+      // Add the class name as a merged cell
+      worksheet.addRow([result.className]);
+      worksheet.mergeCells(worksheet.lastRow.number, 1, worksheet.lastRow.number, 6);
+  
+      // Add header row for columns
+      worksheet.addRow(['Number', 'Rider Name', 'School', 'Draw Order', 'Horse Name']);
+  
+      // Add class data
       result.data.forEach((data) => {
         worksheet.addRow([
-          result.className, // Add Class value
-          data.Placing,
           data.Number,
           data['Rider Name'],
           data.School,
           data['Draw Order'],
           data['Horse Name'],
-          data['Horse Provider'],
         ]);
       });
+  
+      // Add an empty row between classes except for the last class
+      if (index < tableData.length - 1) {
+        worksheet.addRow([]);
+      }
     });
-
+  
     // Generate the Excel file
     const blob = await workbook.xlsx.writeBuffer();
-    saveAs(new Blob([blob]), 'output.xlsx');
+    saveAs(new Blob([blob]), 'Randomized_Results.xlsx');
   };
-
+  
   return (
     <div>
       <NavBar userRole={userRole} handleLogout={handleLogout} />
@@ -167,6 +239,7 @@ const RandomizePage = ({ userRole, handleLogout }) => {
           </button>
         </div>
         <div className="resultsContainer">
+          {/* Display the tables here */}
           <div className="resultsTableContainer">
             {tableData.map((result, index) => (
               <div key={index} className="resultsTable">
@@ -174,25 +247,21 @@ const RandomizePage = ({ userRole, handleLogout }) => {
                 <Table celled>
                   <Table.Header>
                     <Table.Row>
-                      <Table.HeaderCell>Placing</Table.HeaderCell>
                       <Table.HeaderCell>Number</Table.HeaderCell>
                       <Table.HeaderCell>Rider Name</Table.HeaderCell>
                       <Table.HeaderCell>School</Table.HeaderCell>
                       <Table.HeaderCell>Draw Order</Table.HeaderCell>
                       <Table.HeaderCell>Horse Name</Table.HeaderCell>
-                      <Table.HeaderCell>Horse Provider</Table.HeaderCell>
                     </Table.Row>
                   </Table.Header>
                   <Table.Body>
-                    {result.data.map((data, index) => (
-                      <Table.Row key={index}>
-                        <Table.Cell>{data.Placing}</Table.Cell>
+                    {result.data.map((data, dataIndex) => (
+                      <Table.Row key={dataIndex}>
                         <Table.Cell>{data.Number}</Table.Cell>
                         <Table.Cell>{data['Rider Name']}</Table.Cell>
                         <Table.Cell>{data.School}</Table.Cell>
                         <Table.Cell>{data['Draw Order']}</Table.Cell>
                         <Table.Cell>{data['Horse Name']}</Table.Cell>
-                        <Table.Cell>{data['Horse Provider']}</Table.Cell>
                       </Table.Row>
                     ))}
                   </Table.Body>

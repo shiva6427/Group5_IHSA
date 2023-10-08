@@ -5,12 +5,10 @@ const mysql = require('mysql');
 const path = require('path');
 const bcrypt = require('bcrypt');
 const { body, validationResult } = require('express-validator');
-
 const app = express();
 
 app.use(cors());
 app.use(express.json());
-
 app.use(express.static(path.join(__dirname, 'client/build')));
 
 const connection = mysql.createConnection({
@@ -401,12 +399,13 @@ app.post('/api/schools', (req, res) => {
     is_anchor_school,
     region_number,
     zone_number,
-    mileage,
     latitude,
     longitude,
+    zone_chair,
+    region_head,
   } = req.body;
 
-  const insertQuery = 'INSERT INTO schools (college_name, state_name, active_riders, is_anchor_school, region_number, zone_number, mileage, latitude, longitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)';
+  const insertQuery = 'INSERT INTO schools (college_name, state_name, active_riders, is_anchor_school, region_number, zone_number, latitude, longitude, zone_chair, region_head) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
   connection.query(
     insertQuery,
@@ -417,9 +416,10 @@ app.post('/api/schools', (req, res) => {
       is_anchor_school,
       region_number,
       zone_number,
-      mileage,
       latitude,
       longitude,
+      zone_chair,
+      region_head,
     ],
     (err, results) => {
       if (err) {
@@ -433,6 +433,88 @@ app.post('/api/schools', (req, res) => {
   );
 });
 
+app.post('/api/events', async (req, res) => {
+  const {
+    image,
+    name,
+    venue,
+    region,
+    zone,
+    discipline,
+    description,
+    start_date,
+    start_time,
+    end_date,
+    end_time,
+    time_zone,
+    gallery,
+  } = req.body;
+
+  const insertQuery = 'INSERT INTO events (image, name, venue, region, zone, discipline, description, start_date, start_time, end_date, end_time, time_zone, gallery) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+
+  connection.query(
+    insertQuery,
+    [
+      image,
+      name,
+      venue,
+      region,
+      zone,
+      discipline,
+      description,
+      start_date,
+      start_time,
+      end_date,
+      end_time,
+      time_zone,
+      gallery,
+    ],
+    (err, results) => {
+      if (err) {
+        console.error('Error creating event:', err);
+        res.status(500).json({ error: 'Failed to create event' });
+        return;
+      }
+
+      res.json({ message: `Successfully created event "${name}"` });
+    }
+  );
+});
+
+// Update an event
+app.put('/api/events/:id', async (req, res) => {
+  const { id } = req.params;
+  const updatedEvent = req.body;
+
+  const updateQuery = 'UPDATE events SET ? WHERE id = ?';
+
+  connection.query(updateQuery, [updatedEvent, id], (err, results) => {
+    if (err) {
+      console.error('Error updating event:', err);
+      res.status(500).json({ error: 'Failed to update event' });
+      return;
+    }
+
+    res.json({ message: 'Event updated successfully' });
+  });
+});
+
+// Delete an event
+app.delete('/api/events/:id', (req, res) => {
+  const { id } = req.params;
+
+  const deleteQuery = 'DELETE FROM events WHERE id = ?';
+
+  connection.query(deleteQuery, [id], (err, results) => {
+    if (err) {
+      console.error('Error deleting event:', err);
+      res.status(500).json({ error: 'Failed to delete event' });
+      return;
+    }
+
+    res.json({ message: 'Event deleted successfully' });
+  });
+});
 
 app.listen(process.env.PORT || 8000, () => {
   console.log(`Server is running on port ${process.env.PORT || 8000}`);
