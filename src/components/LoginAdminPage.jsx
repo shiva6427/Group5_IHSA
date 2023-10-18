@@ -1,14 +1,17 @@
 import React, { useState } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
+import { message } from 'antd';
 import NavBar from './NavBar';
 import logo1 from '../assets/ihsalogo1.png';
 import image from '../assets/login/horse login.jpg';
+import { EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
 import '../stylings/loginadminPage.css';
 
 const LoginAdminPage = ({ setUserRole }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const navigate = useNavigate();
 
   const handleLogin = (e) => {
@@ -26,12 +29,28 @@ const LoginAdminPage = ({ setUserRole }) => {
         if (role) {
           localStorage.setItem('role', role);
           setUserRole(role);
+          if (role === 'admin') {
+            message.success('Admin Login Successful');
+          } else if (role === 'showadmin') {
+            message.success('Showadmin Login Successful');
+          }
           navigate('/');
+        } else {
+          if (response.status === 401) {
+            message.error('Invalid credentials. Please enter correct credentials.');
+          } else {
+            message.error('An error occurred. Please try again later.');
+          }
         }
       })
       .catch((error) => {
         console.error(error);
+        message.error('Invalid credentials. Please enter correct credentials.');
       });
+  };
+
+  const togglePasswordVisibility = () => {
+    setShowPassword(!showPassword);
   };
 
   return (
@@ -51,13 +70,23 @@ const LoginAdminPage = ({ setUserRole }) => {
               onChange={(e) => setUsername(e.target.value)}
             />
             <label htmlFor="password">Password</label>
-            <input
-              id="password"
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
+            <div className="password-input">
+              <input
+                id="password"
+                type={showPassword ? 'text' : 'password'}
+                placeholder="Password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+              />
+              {showPassword ? (
+                <EyeInvisibleOutlined
+                  className="password-eye-icon"
+                  onClick={togglePasswordVisibility}
+                />
+              ) : (
+                <EyeOutlined className="password-eye-icon" onClick={togglePasswordVisibility} />
+              )}
+            </div>
             <button className="login-button" type="submit">
               LOGIN
             </button>

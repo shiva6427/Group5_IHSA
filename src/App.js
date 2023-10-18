@@ -15,6 +15,7 @@ import ManageEventsPage from './components/ManageEventsPage';
 import ManageRidersPage from './components/ManageRidersPage';
 import ManageHorsesPage from './components/ManageHorsesPage';
 import UserManagementPage from './components/UserManagementPage';
+import ManageAnnouncementsPage from './components/ManageAnnouncementsPage';
 import UserHandler from './UserHandler';
 
 const App = () => {
@@ -50,6 +51,9 @@ const App = () => {
               )}
               {(userRole === 'admin' || userRole === 'showadmin') && (
                 <Route path="/manage-horses" element={<ManageHorsesPage userRole={userRole} handleLogout={handleLogout} />} />
+              )}
+              {(userRole === 'admin' || userRole === 'showadmin') && (
+                <Route path="/manage-announcements" element={<ManageAnnouncementsPage userRole={userRole} handleLogout={handleLogout} />} />
               )}
               {(userRole === 'admin') && (
                 <Route path="/user-management" element={<UserManagementPage userRole={userRole} handleLogout={handleLogout} />} />

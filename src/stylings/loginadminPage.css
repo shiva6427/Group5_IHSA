@@ -101,3 +101,25 @@
     display: none;
   }
 }
+/* Add these styles to your loginadminPage.css */
+.password-input {
+  position: relative;
+}
+
+.password-eye-icon {
+  position: absolute;
+  top: 40%;
+  transform: translateY(-50%);
+  right: 60px; /* Adjust the right spacing as needed */
+  cursor: pointer;
+}
+
+/* Styles for the eye icon */
+.password-eye-icon svg {
+  font-size: 20px; /* Adjust the icon size as needed */
+  color: #888; /* Icon color when not focused */
+}
+
+.password-input input[type="password"]:focus + .password-eye-icon svg {
+  color: #1890ff; /* Icon color when the password field is focused */
+}

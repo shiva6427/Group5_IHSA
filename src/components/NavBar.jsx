@@ -1,16 +1,38 @@
-import React from 'react';
+import React, { useState} from 'react';
 import { Link } from 'react-router-dom';
 import { RiHomeFill, RiMapPin2Fill, RiImageFill, RiUserFill, RiCalendarTodoFill, RiUserSearchFill, RiLogoutBoxFill } from 'react-icons/ri';
 import { GiHorseHead } from 'react-icons/gi';
 import { FaUserFriends } from 'react-icons/fa';
-import { BsFillChatQuoteFill } from 'react-icons/bs';
+import { BsFillChatQuoteFill  } from 'react-icons/bs';
 import { BiShuffle } from 'react-icons/bi'; // Importing Randomize Icon
 import logo from '../assets/ihsalogo.png';
 import '../stylings/navbar.css';
+import { Modal , message } from 'antd';
+
 
 const NavBar = ({ userRole, handleLogout }) => {
   const isAdmin = userRole === 'admin';
   const isShowAdmin = userRole === 'showadmin';
+  const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+
+  const showLogoutModal = () => {
+    setLogoutModalVisible(true);
+  };
+
+  const handleCancelLogout = () => {
+    setLogoutModalVisible(false);
+  };
+
+  const confirmLogout = () => {
+    // Close the modal
+    setLogoutModalVisible(false);
+
+    // Call the handleLogout function to log the user out
+    handleLogout();
+
+     // Display a success message for logout
+     message.success('Logout successful');
+  };
 
   return (
     <div className="navbar">
@@ -43,6 +65,11 @@ const NavBar = ({ userRole, handleLogout }) => {
             <li>
               <Link to="/manage-riders">
                 <FaUserFriends size={20} /> Manage Riders
+              </Link>
+            </li>
+            <li>
+              <Link to="/manage-announcements">
+                <BsFillChatQuoteFill size={20} /> Manage Announcements
               </Link>
             </li>
             {isAdmin && (
@@ -81,7 +108,7 @@ const NavBar = ({ userRole, handleLogout }) => {
         </li>
         <li>
       {userRole ? (
-        <button className="login" onClick={handleLogout}>
+        <button className="login" onClick={showLogoutModal}>
           <RiLogoutBoxFill size={20} /> Logout
         </button>
       ) : (
@@ -91,6 +118,16 @@ const NavBar = ({ userRole, handleLogout }) => {
       )}
       </li>
       </ul>
+      <Modal
+        title="Confirm Logout"
+        visible={logoutModalVisible}
+        onOk={confirmLogout}
+        onCancel={handleCancelLogout}
+        okText="Logout"
+        cancelText="Cancel"
+      >
+        <p>Are you sure you want to logout?</p>
+      </Modal>
     </div>
   );
 };
