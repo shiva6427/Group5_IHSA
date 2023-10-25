@@ -1,21 +1,42 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { useNavigate } from 'react-router-dom';
-import { message } from 'antd';
+import { message, Modal, Popover } from 'antd';
 import NavBar from './NavBar';
 import logo1 from '../assets/ihsalogo1.png';
 import image from '../assets/login/horse login.jpg';
-import { EyeOutlined, EyeInvisibleOutlined } from '@ant-design/icons';
+import { EyeOutlined, EyeInvisibleOutlined, InfoCircleOutlined, MailOutlined } from '@ant-design/icons';
 import '../stylings/loginadminPage.css';
 
 const LoginAdminPage = ({ setUserRole }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
+  const [displayMessage, setDisplayMessage] = useState(false);
+  const [superadminUsername, setSuperadminUsername] = useState('');
   const navigate = useNavigate();
+
+  useEffect(() => {
+    // Fetch superadmin username when the component mounts
+    axios.get('/api/superadmin')
+      .then(response => {
+        setSuperadminUsername(response.data.superadminUsername);
+      })
+      .catch(error => {
+        console.error('Error fetching superadmin username:', error);
+      });
+  }, []);
 
   const handleLogin = (e) => {
     e.preventDefault();
+
+    if (!username || !password) {
+      Modal.error({
+        title: 'Required Fields',
+        content: 'Please enter both username and password.',
+      });
+      return;
+    }
 
     const loginData = {
       username: username,
@@ -32,7 +53,9 @@ const LoginAdminPage = ({ setUserRole }) => {
           if (role === 'admin') {
             message.success('Admin Login Successful');
           } else if (role === 'showadmin') {
-            message.success('Showadmin Login Successful');
+            message.success('ShowAdmin Login Successful');
+          } else if (role === 'superadmin') {
+            message.success('SuperAdmin Login Successful');
           }
           navigate('/');
         } else {
@@ -53,6 +76,17 @@ const LoginAdminPage = ({ setUserRole }) => {
     setShowPassword(!showPassword);
   };
 
+  const handleForgotCredentials = (e) => {
+    e.preventDefault(); 
+    // Display the modal-like message when "Forgot Username" or "Forgot Password" is clicked
+    setDisplayMessage(true);
+  };
+
+  const closeModal = () => {
+    // Close the modal-like message
+    setDisplayMessage(false);
+  };
+
   return (
     <div className="login-page">
       <NavBar />
@@ -61,19 +95,34 @@ const LoginAdminPage = ({ setUserRole }) => {
         <div className="login-card">
           <h2>IHSA Admin Login</h2>
           <form onSubmit={handleLogin}>
-            <label htmlFor="username">User Name</label>
+            <label className="label" htmlFor="username">
+              User Name
+              <Popover content="Please enter a valid email address." trigger="hover">
+                <InfoCircleOutlined className="info-icon" />
+              </Popover>
+            </label>
             <input
               id="username"
               type="text"
+              className="input"
               placeholder="User Name"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
             />
-            <label htmlFor="password">Password</label>
+            <label className="label" htmlFor="password">
+              Password
+              <Popover
+                content="Please enter a valid password. Password must contain at least 6 characters, one number, one uppercase letter, and one special character."
+                trigger="hover"
+              >
+                <InfoCircleOutlined className="info-icon" />
+              </Popover>
+            </label>
             <div className="password-input">
               <input
                 id="password"
                 type={showPassword ? 'text' : 'password'}
+                className="input"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -92,12 +141,27 @@ const LoginAdminPage = ({ setUserRole }) => {
             </button>
           </form>
           <div className="forgot-links">
-            <a href="/">Forgot Username?</a>
-            <a href="/">Forgot Password?</a>
+          <a href="/" onClick={handleForgotCredentials}>
+              Forgot Username?
+            </a>
+            <a href="/" onClick={handleForgotCredentials}>
+              Forgot Password?
+            </a>
           </div>
         </div>
         <img src={image} className="right-image" alt="Horse" />
       </div>
+      <Modal
+        visible={displayMessage}
+        onCancel={closeModal}
+        footer={null}
+      >
+        <div className="forgot-message">
+          <MailOutlined className="email-icon" />
+          <p>Contact the Administrator for Credentials</p>
+          <p>Superadmin Username: {superadminUsername}</p>
+        </div>
+      </Modal>
       <div className="footer-card">
         <p>2023 - IHSA</p>
       </div>

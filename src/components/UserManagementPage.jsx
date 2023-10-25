@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import NavBar from './NavBar';
 import axios from 'axios';
-import { Table, Input, Button, Select, Modal , message , Popover } from 'antd';
+import { Table, Input, Button, Select, Modal, message, Popover } from 'antd';
 import { InfoCircleOutlined } from '@ant-design/icons';
 import '../stylings/usermanagementPage.css';
-
 
 const { Column } = Table;
 const { Option } = Select;
@@ -16,6 +15,9 @@ const UserManagementPage = ({ userRole, loggedInUser, handleLogout }) => {
   const [newPassword, setNewPassword] = useState('');
   const [newRole, setNewRole] = useState('instruction');
   const [contactNumber, setContactNumber] = useState('');
+  const [editingUser, setEditingUser] = useState(null);
+  const [editingPassword, setEditingPassword] = useState(null);
+  const [newPasswordForEditing, setNewPasswordForEditing] = useState('');
 
   const isValidEmail = (email) => {
     const emailPattern = /^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,4}$/;
@@ -26,7 +28,7 @@ const UserManagementPage = ({ userRole, loggedInUser, handleLogout }) => {
     // At least 6 characters, one number, one uppercase letter, and one special character
     const passwordPattern = /^(?=.*\d)(?=.*[A-Z])(?=.*[!@#$%^&*])[A-Za-z\d!@#$%^&*]{6,}$/;
     return passwordPattern.test(password);
-  };  
+  };
 
   const getPasswordPopoverContent = () => (
     <div>
@@ -38,7 +40,7 @@ const UserManagementPage = ({ userRole, loggedInUser, handleLogout }) => {
         <li>Include at least one special character</li>
       </ul>
     </div>
-  );  
+  );
 
   const isValidContactNumber = (number) => {
     const contactNumberPattern = /^\d{10}$/;
@@ -80,10 +82,18 @@ const UserManagementPage = ({ userRole, loggedInUser, handleLogout }) => {
   }, []);
 
   const handleUserCreation = () => {
-    if (!newUsername || !newPassword || !newRole || !isValidEmail(newUsername) || !isValidContactNumber(contactNumber) || !isValidPassword(newPassword)) {
+    if (
+      !newUsername ||
+      !newPassword ||
+      !newRole ||
+      !isValidEmail(newUsername) ||
+      !isValidContactNumber(contactNumber) ||
+      !isValidPassword(newPassword)
+    ) {
       Modal.error({
         title: 'Invalid Fields',
-        content: 'Please fill in all the mandatory fields with valid values: Username, Password, Role, and Contact Number (10 digits only).',
+        content:
+          'Please fill in all the mandatory fields with valid values: Username, Password, Role, and Contact Number (10 digits only).',
       });
       return;
     }
@@ -102,14 +112,14 @@ const UserManagementPage = ({ userRole, loggedInUser, handleLogout }) => {
         setContactNumber('');
         fetchAdmins();
         fetchShowAdmins();
-     // Display a success message based on the role
-     message.success(`User added as ${newRole}.`);
-    })
-    .catch((err) => {
-      console.error(err);
-      message.error('Failed to add the user. Please try again later.');
-    });
-};
+        // Display a success message based on the role
+        message.success(`User added as ${newRole}.`);
+      })
+      .catch((err) => {
+        console.error(err);
+        message.error('Failed to add the user. Please try again later.');
+      });
+  };
 
   const handleMakeAdmin = (username, unformattedContactNumber) => {
     Modal.confirm({
@@ -128,8 +138,8 @@ const UserManagementPage = ({ userRole, loggedInUser, handleLogout }) => {
             message.error('Failed to make the user an admin. Please try again later.');
           });
       },
-      });
-    };
+    });
+  };
 
   const handleRemoveAccess = (username, role) => {
     Modal.confirm({
@@ -149,19 +159,58 @@ const UserManagementPage = ({ userRole, loggedInUser, handleLogout }) => {
             return;
         }
         axios
-        .put(endpoint)
+          .put(endpoint)
+          .then(() => {
+            message.success('User access has been removed.');
+            fetchAdmins();
+            fetchShowAdmins();
+          })
+          .catch((err) => {
+            console.error(err);
+            message.error('Failed to remove user access. Please try again later.');
+          });
+      },
+    });
+  };
+
+  const handleEditUser = () => {
+    if (!editingUser) {
+      return;
+    }
+    const { username, newUsername, contactNumber } = editingUser;
+    axios
+      .put(`/api/admins/${username}`, {
+        newUsername,
+        contact_number: contactNumber,
+      })
+      .then(() => {
+        message.success('User information updated successfully.');
+        setEditingUser(null);
+        fetchAdmins();
+        fetchShowAdmins();
+      })
+      .catch((err) => {
+        console.error(err);
+        message.error('Failed to update user information. Please try again later.');
+      });
+  };
+
+  const handleEditPassword = (username, role) => {
+    if (isValidPassword(newPasswordForEditing)) {
+      axios
+        .put(`/api/updatePassword/${username}`, { newPassword: newPasswordForEditing, role })
         .then(() => {
-          message.success('User access has been removed.');
-          fetchAdmins();
-          fetchShowAdmins();
+          message.success('Password updated successfully.');
+          setEditingPassword(null);
         })
         .catch((err) => {
           console.error(err);
-          message.error('Failed to remove user access. Please try again later.');
+          message.error('Failed to update the password. Please try again later.');
         });
-    },
-  });
-};
+    } else {
+      message.error('Invalid password. Password must meet the criteria.');
+    }
+  };
 
   useEffect(() => {
     fetchAdmins();
@@ -197,6 +246,30 @@ const UserManagementPage = ({ userRole, loggedInUser, handleLogout }) => {
                     >
                       Remove Access
                     </Button>
+                    <Button
+                      type="primary"
+                      size="small"
+                      style={{ marginLeft: 10 }}
+                      onClick={() =>
+                        setEditingUser({
+                          username: record.username,
+                          newUsername: record.username,
+                          contactNumber: record.unformattedContactNumber,
+                        })
+                      }
+                    >
+                      Edit
+                    </Button>
+                    {userRole === 'superadmin' && (
+                      <Button
+                        type="primary"
+                        size="small"
+                        style={{ marginLeft: 10 }}
+                        onClick={() => setEditingPassword(record.username)}
+                      >
+                        Edit Password
+                      </Button>
+                    )}
                   </span>
                 )}
               </strong>
@@ -228,19 +301,25 @@ const UserManagementPage = ({ userRole, loggedInUser, handleLogout }) => {
                   >
                     Make Admin
                   </Button>
-                </span>
-                {record.username !== loggedInUser && (
-                  <span>
-                    <Button
+                  <Button
                     type="danger"
                     size="small"
-                    style={{ backgroundColor: 'red', color: 'white' }}
+                    style={{ marginLeft: 10 }}
                     onClick={() => handleRemoveAccess(record.username, record.role)}
                   >
                     Remove Access
                   </Button>
-                  </span>
-                )}
+                  {userRole === 'superadmin' && (
+                    <Button
+                      type="primary"
+                      size="small"
+                      style={{ marginLeft: 10 }}
+                      onClick={() => setEditingPassword(record.username)}
+                    >
+                      Edit Password
+                    </Button>
+                  )}
+                </span>
               </strong>
             )}
           />
@@ -254,50 +333,106 @@ const UserManagementPage = ({ userRole, loggedInUser, handleLogout }) => {
             value={newUsername}
             onChange={(e) => setNewUsername(e.target.value)}
             addonAfter={
-           <Popover content="Please enter a valid email address." trigger="hover">
-            <InfoCircleOutlined />
-            </Popover>
+              <Popover content="Please enter a valid email address." trigger="hover">
+                <InfoCircleOutlined />
+              </Popover>
             }
           />
           <Input.Password
-              placeholder="Password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
+            placeholder="Password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+            addonAfter={
+              <Popover content={getPasswordPopoverContent()} trigger="hover">
+                <InfoCircleOutlined />
+              </Popover>
+            }
+          />
+          <Input
+            placeholder="Contact Number (e.g., 1234567890)"
+            value={formatContactNumber(contactNumber, false)}
+            onChange={(e) => {
+              const value = e.target.value.replace(/\D/g, '').slice(0, 10);
+              setContactNumber(value);
+            }}
+            addonAfter={
+              <Popover content="Please enter a 10-digit contact number." trigger="hover">
+                <InfoCircleOutlined />
+              </Popover>
+            }
+          />
+          <Select
+            placeholder="Select a Role"
+            value={newRole}
+            onChange={(value) => setNewRole(value)}
+          >
+            <Option value="instruction" disabled>
+              Select a Role
+            </Option>
+            <Option value="admin">Admin</Option>
+            <Option value="showadmin">Show Admin</Option>
+          </Select>
+          <Button type="primary" className="create-user-button" onClick={handleUserCreation}>
+            Create User
+          </Button>
+        </div>
+      </div>
+
+      {/* Edit User Modal */}
+      <Modal
+        title="Edit User Information"
+        visible={!!editingUser}
+        onOk={handleEditUser}
+        onCancel={() => setEditingUser(null)}
+      >
+        {editingUser && (
+          <div>
+            <Input
+              placeholder="New Username"
+              value={editingUser.newUsername}
+              onChange={(e) =>
+                setEditingUser({ ...editingUser, newUsername: e.target.value })
+              }
+            />
+            <Input
+              placeholder="New Contact Number"
+              value={editingUser.contactNumber}
+              onChange={(e) =>
+                setEditingUser({
+                  ...editingUser,
+                  contactNumber: e.target.value.replace(/\D/g, '').slice(0, 10),
+                })
+              }
+            />
+          </div>
+        )}
+      </Modal>
+
+      {/* Edit Password Modal */}
+      <Modal
+        title="Edit Password"
+        visible={!!editingPassword}
+        onOk={() => handleEditPassword(editingPassword, 'admin')}
+        onCancel={() => {
+          setEditingPassword(null);
+          setNewPasswordForEditing('');
+        }}
+      >
+        {editingPassword && (
+          <div>
+            <Input.Password
+              placeholder="New Password"
+              value={newPasswordForEditing}
+              onChange={(e) => setNewPasswordForEditing(e.target.value)}
               addonAfter={
                 <Popover content={getPasswordPopoverContent()} trigger="hover">
                   <InfoCircleOutlined />
                 </Popover>
               }
             />
-            <Input
-              placeholder="Contact Number (e.g., 1234567890)"
-              value={formatContactNumber(contactNumber, false)}
-              onChange={(e) => {
-                const value = e.target.value.replace(/\D/g, '').slice(0, 10);
-                setContactNumber(value);
-              }}
-              addonAfter={
-                <Popover content="Please enter a 10-digit contact number." trigger="hover">
-                   <InfoCircleOutlined />
-                </Popover>
-              }
-            />
-         <Select
-        placeholder="Select a Role"
-        value={newRole}
-        onChange={(value) => setNewRole(value)}
-      >
-        <Option value="instruction" disabled>
-          Select a Role
-        </Option>
-        <Option value="admin">Admin</Option>
-        <Option value="showadmin">Show Admin</Option>
-      </Select>
-          <Button type="primary" className="create-user-button" onClick={handleUserCreation}>
-            Create User
-          </Button>
-        </div>
-      </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };
