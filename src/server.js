@@ -2,7 +2,7 @@ require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const { PrismaClient } = require('@prisma/client');
-const mysql = require('mysql');
+//const mysql = require('mysql');
 const path = require('path');
 const bcrypt = require('bcrypt');
 const { validationResult ,body} = require('express-validator');
@@ -21,6 +21,10 @@ const prisma = new PrismaClient();
   database: process.env.DB_NAME,
   port: process.env.DB_PORT
 }); */
+POSTGRES_USER="default"
+POSTGRES_HOST="ep-red-credit-56922281-pooler.us-east-1.postgres.vercel-storage.com"
+POSTGRES_PASSWORD="UJwCtzvuE02G"
+POSTGRES_DATABASE="verceldb"
 
 connection.connect((err) => {
   if (err) {
