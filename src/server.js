@@ -1,32 +1,29 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const { PrismaClient } = require('@prisma/client');
-//const mysql = require('mysql');
+const { Pool } = require('pg');
 const path = require('path');
 const bcrypt = require('bcrypt');
-const { validationResult ,body} = require('express-validator');
+const { validationResult, body } = require('express-validator');
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'client/build')));
 
-const prisma = new PrismaClient();
+const pool = new Pool({
+  connectionString: process.env.POSTGRES_URL,
+  user: process.env.POSTGRES_USER,
+  host: process.env.POSTGRES_HOST,
+  database: process.env.POSTGRES_DATABASE,
+  password: process.env.POSTGRES_PASSWORD,
+  port: process.env.POSTGRES_PORT,
+  ssl: {
+    rejectUnauthorized: false, // add this line to disable certificate validation (not recommended for production)
+  },
+});
 
-/* const connection = mysql.createConnection({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: process.env.DB_PORT
-}); */
-POSTGRES_USER="default"
-POSTGRES_HOST="ep-red-credit-56922281-pooler.us-east-1.postgres.vercel-storage.com"
-POSTGRES_PASSWORD="UJwCtzvuE02G"
-POSTGRES_DATABASE="verceldb"
-
-connection.connect((err) => {
+pool.connect((err) => {
   if (err) {
     console.error('Error connecting to the database:', err);
     process.exit(1);
@@ -34,145 +31,218 @@ connection.connect((err) => {
   console.log('Connected to the database');
 });
 
-app.get('/api/events', async (req, res) => {
-  try {
-    const events = await prisma.events.findMany();
-    res.json(events);
-  } catch (error) {
-    console.error('Error retrieving events:', error);
-    res.status(500).json({ error: 'Failed to retrieve events' });
-  }
+app.get('/api/events', (req, res) => {
+  const query = 'SELECT * FROM events';
+
+  pool.query(query, (err, results) => {
+    if (err) {
+      console.error('Error retrieving events:', err);
+      res.status(500).json({ error: 'Failed to retrieve events' });
+      return;
+    }
+
+    res.json(results);
+  });
 });
 
-app.get('/api/schools', async (req, res) => {
-  try {
-    const schools = await prisma.schools.findMany();
-    res.json(schools);
-  } catch (error) {
-    console.error('Error retrieving schools:', error);
-    res.status(500).json({ error: 'Failed to retrieve schools' });
-  }
+app.get('/api/schools', (req, res) => {
+  const query = 'SELECT * FROM schools';
+
+  pool.query(query, (err, results) => {
+    if (err) {
+      console.error('Error retrieving schools:', err);
+      res.status(500).json({ error: 'Failed to retrieve schools' });
+      return;
+    }
+
+    res.json(results);
+  });
 });
 
-app.get('/api/announcements', async (req, res) => {
-  try {
-    const announcements = await prisma.announcements.findMany();
-    res.json(announcements);
-  } catch (error) {
-    console.error('Error retrieving announcements:', error);
-    res.status(500).json({ error: 'Failed to retrieve announcements' });
-  }
+app.get('/api/announcements', (req, res) => {
+  const query = 'SELECT * FROM announcements';
+
+  pool.query(query, (err, results) => {
+    if (err) {
+      console.error('Error retrieving announcements:', err);
+      res.status(500).json({ error: 'Failed to retrieve announcements' });
+      return;
+    }
+
+    res.json(results);
+  });
 });
 
 app.post('/api/login', async (req, res) => {
   const { username, password } = req.body;
 
-  try {
-    const admin = await prisma.admin.findUnique({ where: { username } });
-    const showadmin = await prisma.showadmin.findUnique({ where: { username } });
-    const superadmin = await prisma.superadmin.findUnique({ where: { username } });
+  const adminQuery = 'SELECT * FROM admins WHERE username = ?';
+  const showAdminQuery = 'SELECT * FROM showadmins WHERE username = ?';
+  const superadminQuery = 'SELECT * FROM superadmin WHERE username = ?';
 
-    const user = admin || showadmin || superadmin;
+  const [adminResults, showAdminResults, superadminResults] = await Promise.all([
+    new Promise((resolve, reject) =>
+      pool.query(adminQuery, [username], (err, results) => (err ? reject(err) : resolve(results)))
+    ),
+    new Promise((resolve, reject) =>
+      pool.query(showAdminQuery, [username], (err, results) => (err ? reject(err) : resolve(results)))
+    ),
+    new Promise((resolve, reject) =>
+      pool.query(superadminQuery, [username], (err, results) => (err ? reject(err) : resolve(results)))
+    ),
+  ]);
 
-    if (!user) {
-      return res.status(401).json({ error: 'Invalid username' });
-    }
+  if (adminResults.length > 0) {
+    const admin = adminResults[0];
 
-    bcrypt.compare(password, user.password, function (err, isMatch) {
+    bcrypt.compare(password, admin.password, function(err, isMatch) {
       if (err) {
         console.error('Error while comparing passwords:', err);
-        return res.status(500).json({ error: 'Failed to authenticate' });
+        res.status(500).json({ error: 'Failed to authenticate' });
+        return;
       }
 
       if (!isMatch) {
         console.log('Invalid password:', password);
-        return res.status(401).json({ error: 'Invalid password' });
+        res.status(401).json({ error: 'Invalid password' });
+        return;
       }
 
-      const role = user.role.toLowerCase(); // Assuming you have a 'role' field in the database
+      const role = 'admin';
 
-      console.log(`${role} Login successful:`, { username, role });
+      console.log('Admin Login successful:', { username, role });
       res.json({ message: 'Login successful', role });
     });
-  } catch (error) {
-    console.error('Error during login:', error);
-    res.status(500).json({ error: 'Failed to authenticate' });
-  }
-});
+  } else if (showAdminResults.length > 0) {
+    const showadmin = showAdminResults[0];
 
-// Get showadmins
-app.get('/api/showadmins', async (req, res) => {
-  try {
-    const showadmins = await prisma.showadmin.findMany({
-      select: { username: true, contact_number: true },
+    bcrypt.compare(password, showadmin.password, function(err, isMatch) {
+      if (err) {
+        console.error('Error while comparing passwords:', err);
+        res.status(500).json({ error: 'Failed to authenticate' });
+        return;
+      }
+
+      if (!isMatch) {
+        console.log('Invalid password:', password);
+        res.status(401).json({ error: 'Invalid password' });
+        return;
+      }
+
+      const role = 'showadmin';
+
+      console.log('ShowAdmin Login successful:', { username, role });
+      res.json({ message: 'Login successful', role });
     });
-    res.json(showadmins);
-  } catch (error) {
-    console.error('Error retrieving show admins:', error);
-    res.status(500).json({ error: 'Failed to retrieve show admins' });
-  }
-});
+  } 
+  else if (superadminResults.length > 0) {
+    const superadmin = superadminResults[0];
 
-// Get admins
-app.get('/api/admins', async (req, res) => {
-  try {
-    const admins = await prisma.admin.findMany({
-      select: { username: true, contact_number: true },
+    bcrypt.compare(password, superadmin.password, function(err, isMatch) {
+      if (err) {
+        console.error('Error while comparing passwords:', err);
+        res.status(500).json({ error: 'Failed to authenticate' });
+        return;
+      }
+
+      if (!isMatch) {
+        console.log('Invalid password:', password);
+        res.status(401).json({ error: 'Invalid password' });
+        return;
+      }
+
+      const role = 'superadmin';
+
+      console.log('SuperAdmin Login successful:', { username, role });
+      res.json({ message: 'Login successful', role });
     });
-    res.json(admins);
-  } catch (error) {
-    console.error('Error retrieving admins:', error);
-    res.status(500).json({ error: 'Failed to retrieve admins' });
+  }
+  else {
+    res.status(401).json({ error: 'Invalid username' });
   }
 });
 
-// Update showadmin to admin
+app.get('/api/showadmins', (req, res) => {
+  const query = 'SELECT username, contact_number FROM showadmins';
+
+  pool.query(query, (err, results) => {
+    if (err) {
+      console.error('Error retrieving show admins:', err);
+      res.status(500).json({ error: 'Failed to retrieve show admins' });
+      return;
+    }
+
+    res.json(results);
+  });
+});
+
+app.get('/api/admins', (req, res) => {
+  const query = 'SELECT username, contact_number FROM admins';
+
+  pool.query(query, (err, results) => {
+    if (err) {
+      console.error('Error retrieving admins:', err);
+      res.status(500).json({ error: 'Failed to retrieve admins' });
+      return;
+    }
+
+    res.json(results);
+  });
+});
+
 app.put('/api/showadmins/:username', async (req, res) => {
   const { username } = req.params;
   const { contact_number } = req.body;
-
-  try {
-    const showadmin = await prisma.showadmin.findUnique({ where: { username } });
-
-    if (!showadmin) {
-      return res.status(404).json({ error: 'User not found' });
+  const showAdminQuery = 'SELECT * FROM showadmins WHERE username = ?';
+  pool.query(showAdminQuery, [username], (err, results) => {
+    if (err || results.length === 0) {
+      console.error('Error retrieving show admin:', err);
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
 
-    const { password } = showadmin;
+    const { password } = results[0];
 
-    await prisma.showadmin.delete({ where: { username } });
+    const deleteShowAdminQuery = 'DELETE FROM showadmins WHERE username = ?';
+    pool.query(deleteShowAdminQuery, [username], (err) => {
+      if (err) {
+        console.error('Error deleting show admin:', err);
+        res.status(500).json({ error: 'Failed to update admin status' });
+        return;
+      }
 
-    await prisma.admin.create({
-      data: { username, password, contact_number },
+      const addAdminQuery = 'INSERT INTO admins (username, password, contact_number) VALUES (?, ?, ?)';
+      pool.query(addAdminQuery, [username, password, contact_number], (err) => {
+        if (err) {
+          console.error('Error adding admin:', err);
+          res.status(500).json({ error: 'Failed to update admin status' });
+          return;
+        }
+
+        res.json({ message: 'Admin status updated' });
+      });
     });
-
-    res.json({ message: 'Admin status updated' });
-  } catch (error) {
-    console.error('Error updating showadmin to admin:', error);
-    res.status(500).json({ error: 'Failed to update admin status' });
-  }
+  });
 });
 
-// Get all users
 app.get('/api/users', async (req, res) => {
-  try {
-    const admins = await prisma.admin.findMany({
-      select: { username: true, contact_number: true, role: { select: { admin: true } } },
-    });
-    const showadmins = await prisma.showadmin.findMany({
-      select: { username: true, contact_number: true, role: { select: { showadmin: true } } },
-    });
+  const adminQuery = 'SELECT username, contact_number \'admin\' as role FROM admins';
+  const showAdminQuery = 'SELECT username, contact_number \'showadmin\' as role FROM showadmins';
 
-    const allUsers = [...admins.map(user => ({ ...user, role: 'admin' })), ...showadmins.map(user => ({ ...user, role: 'showadmin' }))];
+  const [adminResults, showAdminResults] = await Promise.all([
+    new Promise((resolve, reject) => 
+      pool.query(adminQuery, (err, results) => (err ? reject(err) : resolve(results)))
+    ),
+    new Promise((resolve, reject) => 
+      pool.query(showAdminQuery, (err, results) => (err ? reject(err) : resolve(results)))
+    ),
+  ]);
 
-    res.json(allUsers);
-  } catch (error) {
-    console.error('Error retrieving users:', error);
-    res.status(500).json({ error: 'Failed to retrieve users' });
-  }
+  const allUsers = [...adminResults, ...showAdminResults];
+
+  res.json(allUsers);
 });
 
-// Change user password
 app.post(
   '/api/changePassword', 
   [
@@ -187,73 +257,85 @@ app.post(
     }
     
     const { username, password, role } = req.body;
+  
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-    try {
-      const hashedPassword = await bcrypt.hash(password, 10);
+    let updateQuery;
+    if (role === 'showadmin') {
+      updateQuery = 'UPDATE showadmins SET password = ? WHERE username = ?';
+    } else if (role === 'admin') {
+      updateQuery = 'UPDATE admins SET password = ? WHERE username = ?';
+    } else {
+      return;
+    }
 
-      if (role === 'showadmin') {
-        await prisma.showadmin.update({
-          where: { username },
-          data: { password: hashedPassword },
-        });
-      } else if (role === 'admin') {
-        await prisma.admin.update({
-          where: { username },
-          data: { password: hashedPassword },
-        });
-      } else {
+    pool.query(updateQuery, [hashedPassword, username], (err) => {
+      if (err) {
+        console.error('Error updating password:', err);
+        res.status(500).json({ error: 'Failed to update password' });
         return;
       }
-
+  
       res.json({ message: 'Password updated successfully' });
-    } catch (error) {
-      console.error('Error updating password:', error);
-      res.status(500).json({ error: 'Failed to update password' });
-    }
+    });
   }
 );
 
-// Make showadmin an admin
 app.put('/api/makeAdmin/:username', async (req, res) => {
   const { username } = req.params;
-  const { contact_number } = req.body;
+  const { contact_number } = req.body; // Get the contact_number from the request
+  console.log('Received data:', { username, contact_number }); // Add this line for logging
 
-  try {
-    const showadmin = await prisma.showadmin.findUnique({ where: { username } });
-
-    if (!showadmin) {
-      return res.status(404).json({ error: 'User not found' });
+  // First, we need to get the password of the showadmin who is being made an admin
+  const showAdminQuery = 'SELECT * FROM showadmins WHERE username = ?';
+  pool.query(showAdminQuery, [username], (err, results) => {
+    if (err || results.length === 0) {
+      console.error('Error retrieving show admin:', err);
+      res.status(404).json({ error: 'User not found' });
+      return;
     }
 
-    const { password } = showadmin;
+    const { password } = results[0];
 
-    await prisma.showadmin.delete({ where: { username } });
+    // Delete the user from the showadmins table
+    const deleteShowAdminQuery = 'DELETE FROM showadmins WHERE username = ?';
+    pool.query(deleteShowAdminQuery, [username], (err) => {
+      if (err) {
+        console.error('Error deleting show admin:', err);
+        res.status(500).json({ error: 'Failed to update admin status' });
+        return;
+      }
 
-    await prisma.admin.create({
-      data: { username, password, contact_number },
+      // Add the user to the admins table, including the contact_number
+      const addAdminQuery = 'INSERT INTO admins (username, password, contact_number) VALUES (?, ?, ?)';
+      pool.query(addAdminQuery, [username, password, contact_number], (err) => {
+        if (err) {
+          console.error('Error adding admin:', err);
+          res.status(500).json({ error: 'Failed to update admin status' });
+          return;
+        }
+
+        res.json({ message: 'Admin status updated' });
+      });
     });
-
-    res.json({ message: 'Admin status updated' });
-  } catch (error) {
-    console.error('Error updating showadmin to admin:', error);
-    res.status(500).json({ error: 'Failed to update admin status' });
-  }
+  });
 });
 
-// Remove admin status
 app.put('/api/removeAdmin/:username', async (req, res) => {
   const { username } = req.params;
 
-  try {
-    await prisma.admin.delete({ where: { username } });
+  const deleteAdminQuery = 'DELETE FROM admins WHERE username = ?';
+  pool.query(deleteAdminQuery, [username], (err) => {
+    if (err) {
+      console.error('Error deleting admin:', err);
+      res.status(500).json({ error: 'Failed to remove admin' });
+      return;
+    }
+
     res.json({ message: 'Admin removed' });
-  } catch (error) {
-    console.error('Error deleting admin:', error);
-    res.status(500).json({ error: 'Failed to remove admin' });
-  }
+  });
 });
 
-// Create user
 app.post('/api/createUser',
   [
     body('username').notEmpty().withMessage('Username is required').bail().isString().withMessage('Username must be a string'),
@@ -269,76 +351,81 @@ app.post('/api/createUser',
 
     const { username, password, contact_number, role } = req.body;
 
-    try {
-      const hashedPassword = await bcrypt.hash(password, 10);
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-      if (role === 'showadmin') {
-        await prisma.showadmin.create({
-          data: { username, password: hashedPassword, contact_number },
-        });
-      } else if (role === 'admin') {
-        await prisma.admin.create({
-          data: { username, password: hashedPassword, contact_number },
-        });
-      } else {
+    let insertQuery;
+    if (role === 'showadmin') {
+      insertQuery = 'INSERT INTO showadmins (username, password, contact_number) VALUES (?, ?, ?)';
+    } else if (role === 'admin') {
+      insertQuery = 'INSERT INTO admins (username, password, contact_number) VALUES (?, ?, ?)';
+    } else {
+      return;
+    }
+
+    pool.query(insertQuery, [username, hashedPassword, contact_number], (err) => {
+      if (err) {
+        console.error('Error creating user:', err);
+        res.status(500).json({ error: 'Failed to create user' });
         return;
       }
 
       res.json({ message: 'User created successfully' });
-    } catch (error) {
-      console.error('Error creating user:', error);
-      res.status(500).json({ error: 'Failed to create user' });
-    }
+    });
   }
 );
 
-// Remove showadmin
+
 app.put('/api/removeShowAdmin/:username', async (req, res) => {
   const { username } = req.params;
 
-  try {
-    await prisma.showadmin.delete({ where: { username } });
+  const deleteShowAdminQuery = 'DELETE FROM showadmins WHERE username = ?';
+  pool.query(deleteShowAdminQuery, [username], (err) => {
+    if (err) {
+      console.error('Error deleting show admin:', err);
+      res.status(500).json({ error: 'Failed to remove show admin' });
+      return;
+    }
+
     res.json({ message: 'Show admin removed' });
-  } catch (error) {
-    console.error('Error deleting show admin:', error);
-    res.status(500).json({ error: 'Failed to remove show admin' });
-  }
+  });
 });
 
-// Update latitude and longitude for a school
-app.put('/api/schools/:id', async (req, res) => {
+app.put('/api/schools/:id', (req, res) => {
   const { id } = req.params;
   const { latitude, longitude } = req.body;
 
-  try {
-    await prisma.schools.update({
-      where: { id: parseInt(id) },
-      data: { latitude, longitude },
-    });
+  const updateQuery = 'UPDATE schools SET latitude = ?, longitude = ? WHERE id = ?';
+
+  pool.query(updateQuery, [latitude, longitude, id], (err, results) => {
+    if (err) {
+      console.error('Error updating latitude and longitude:', err);
+      res.status(500).json({ error: 'Failed to update latitude and longitude' });
+      return;
+    }
 
     res.json({ message: 'Latitude and longitude updated successfully' });
-  } catch (error) {
-    console.error('Error updating latitude and longitude:', error);
-    res.status(500).json({ error: 'Failed to update latitude and longitude' });
-  }
+  });
 });
 
-// Remove a school
-app.delete('/api/schools/:id', async (req, res) => {
+// Remove a college
+app.delete('/api/schools/:id', (req, res) => {
   const { id } = req.params;
 
-  try {
-    await prisma.schools.delete({ where: { id: parseInt(id) } });
+  const deleteQuery = 'DELETE FROM schools WHERE id = ?';
 
-    res.json({ message: 'School removed successfully' });
-  } catch (error) {
-    console.error('Error removing school:', error);
-    res.status(500).json({ error: 'Failed to remove school' });
-  }
+  pool.query(deleteQuery, [id], (err, results) => {
+    if (err) {
+      console.error('Error removing college:', err);
+      res.status(500).json({ error: 'Failed to remove college' });
+      return;
+    }
+
+    res.json({ message: 'College removed successfully' });
+  });
 });
 
-// Add a new school
-app.post('/api/schools', async (req, res) => {
+// Add a new college
+app.post('/api/schools', (req, res) => {
   const {
     college_name,
     state_name,
@@ -352,30 +439,34 @@ app.post('/api/schools', async (req, res) => {
     region_head,
   } = req.body;
 
-  try {
-    await prisma.schools.create({
-      data: {
-        college_name,
-        state_name,
-        active_riders,
-        is_anchor_school,
-        region_number,
-        zone_number,
-        latitude,
-        longitude,
-        zone_chair,
-        region_head,
-      },
-    });
+  const insertQuery = 'INSERT INTO schools (college_name, state_name, active_riders, is_anchor_school, region_number, zone_number, latitude, longitude, zone_chair, region_head) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
-    res.json({ message: `Successfully added "${college_name}"` });
-  } catch (error) {
-    console.error('Error adding school:', error);
-    res.status(500).json({ error: 'Failed to add school' });
-  }
+  pool.query(
+    insertQuery,
+    [
+      college_name,
+      state_name,
+      active_riders,
+      is_anchor_school,
+      region_number,
+      zone_number,
+      latitude,
+      longitude,
+      zone_chair,
+      region_head,
+    ],
+    (err, results) => {
+      if (err) {
+        console.error('Error adding college:', err);
+        res.status(500).json({ error: 'Failed to add college' });
+        return;
+      }
+
+      res.json({ message: `Successfully added "${college_name}"` });
+    }
+  );
 });
 
-// Create a new event
 app.post('/api/events', async (req, res) => {
   const {
     image,
@@ -393,30 +484,35 @@ app.post('/api/events', async (req, res) => {
     gallery,
   } = req.body;
 
-  try {
-    await prisma.events.create({
-      data: {
-        image,
-        name,
-        venue,
-        region,
-        zone,
-        discipline,
-        description,
-        start_date,
-        start_time,
-        end_date,
-        end_time,
-        time_zone,
-        gallery,
-      },
-    });
+  const insertQuery = 'INSERT INTO events (image, name, venue, region, zone, discipline, description, start_date, start_time, end_date, end_time, time_zone, gallery) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
-    res.json({ message: `Successfully created event "${name}"` });
-  } catch (error) {
-    console.error('Error creating event:', error);
-    res.status(500).json({ error: 'Failed to create event' });
-  }
+  pool.query(
+    insertQuery,
+    [
+      image,
+      name,
+      venue,
+      region,
+      zone,
+      discipline,
+      description,
+      start_date,
+      start_time,
+      end_date,
+      end_time,
+      time_zone,
+      gallery,
+    ],
+    (err, results) => {
+      if (err) {
+        console.error('Error creating event:', err);
+        res.status(500).json({ error: 'Failed to create event' });
+        return;
+      }
+
+      res.json({ message: `Successfully created event "${name}"` });
+    }
+  );
 });
 
 // Update an event
@@ -424,162 +520,165 @@ app.put('/api/events/:id', async (req, res) => {
   const { id } = req.params;
   const updatedEvent = req.body;
 
-  try {
-    await prisma.events.update({
-      where: { id: parseInt(id) },
-      data: updatedEvent,
-    });
+  const updateQuery = 'UPDATE events SET ? WHERE id = ?';
+
+  pool.query(updateQuery, [updatedEvent, id], (err, results) => {
+    if (err) {
+      console.error('Error updating event:', err);
+      res.status(500).json({ error: 'Failed to update event' });
+      return;
+    }
 
     res.json({ message: 'Event updated successfully' });
-  } catch (error) {
-    console.error('Error updating event:', error);
-    res.status(500).json({ error: 'Failed to update event' });
-  }
+  });
 });
 
 // Delete an event
-app.delete('/api/events/:id', async (req, res) => {
+app.delete('/api/events/:id', (req, res) => {
   const { id } = req.params;
 
-  try {
-    await prisma.events.delete({ where: { id: parseInt(id) } });
+  const deleteQuery = 'DELETE FROM events WHERE id = ?';
+
+  pool.query(deleteQuery, [id], (err, results) => {
+    if (err) {
+      console.error('Error deleting event:', err);
+      res.status(500).json({ error: 'Failed to delete event' });
+      return;
+    }
 
     res.json({ message: 'Event deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting event:', error);
-    res.status(500).json({ error: 'Failed to delete event' });
-  }
+  });
 });
 
-// Create a new announcement
-app.post('/api/announcements', async (req, res) => {
+// Announcements
+app.post('/api/announcements', (req, res) => {
   const { title, content, date, time } = req.body;
 
-  try {
-    await prisma.announcements.create({
-      data: { title, content, date, time },
-    });
+  const insertQuery = 'INSERT INTO announcements (title, content, date, time) VALUES (?, ?, ?, ?)';
+
+  pool.query(insertQuery, [title, content, date, time], (err, results) => {
+    if (err) {
+      console.error('Error creating announcement:', err);
+      res.status(500).json({ error: 'Failed to create announcement' });
+      return;
+    }
 
     res.json({ message: 'Announcement created successfully' });
-  } catch (error) {
-    console.error('Error creating announcement:', error);
-    res.status(500).json({ error: 'Failed to create announcement' });
-  }
+  });
 });
 
-// Update an announcement
 app.put('/api/announcements/:id', async (req, res) => {
   const { id } = req.params;
   const updatedAnnouncement = req.body;
 
-  try {
-    await prisma.announcements.update({
-      where: { id: parseInt(id) },
-      data: updatedAnnouncement,
-    });
+  const updateQuery = 'UPDATE announcements SET ? WHERE id = ?';
+
+  pool.query(updateQuery, [updatedAnnouncement, id], (err, results) => {
+    if (err) {
+      console.error('Error updating announcement:', err);
+      res.status(500).json({ error: 'Failed to update announcement' });
+      return;
+    }
 
     res.json({ message: 'Announcement updated successfully' });
-  } catch (error) {
-    console.error('Error updating announcement:', error);
-    res.status(500).json({ error: 'Failed to update announcement' });
-  }
+  });
 });
 
-// Delete an announcement
-app.delete('/api/announcements/:id', async (req, res) => {
+app.delete('/api/announcements/:id', (req, res) => {
   const { id } = req.params;
 
-  try {
-    await prisma.announcements.delete({ where: { id: parseInt(id) } });
+  const deleteQuery = 'DELETE FROM announcements WHERE id = ?';
+
+  pool.query(deleteQuery, [id], (err, results) => {
+    if (err) {
+      console.error('Error deleting announcement:', err);
+      res.status(500).json({ error: 'Failed to delete announcement' });
+      return;
+    }
 
     res.json({ message: 'Announcement deleted successfully' });
-  } catch (error) {
-    console.error('Error deleting announcement:', error);
-    res.status(500).json({ error: 'Failed to delete announcement' });
-  }
+  });
 });
 
-// Update admin details
-app.put('/api/admins/:username', async (req, res) => {
+// edit admins and show admins
+app.put('/api/admins/:username', (req, res) => {
   const { username } = req.params;
   const { newUsername, contact_number } = req.body;
 
-  try {
-    await prisma.admins.update({
-      where: { username },
-      data: { username: newUsername, contact_number },
-    });
+  const updateQuery = 'UPDATE admins SET username = ?, contact_number = ? WHERE username = ?';
 
+  pool.query(updateQuery, [newUsername, contact_number, username], (err, result) => {
+    if (err) {
+      console.error('Error updating admin username and contact number:', err);
+      res.status(500).json({ error: 'Failed to update admin username and contact number' });
+      return;
+    }
+    
     res.json({ message: 'Admin username and contact number updated successfully' });
-  } catch (error) {
-    console.error('Error updating admin username and contact number:', error);
-    res.status(500).json({ error: 'Failed to update admin username and contact number' });
-  }
+  });
 });
 
-// Update showadmin details
-app.put('/api/showadmins/:username', async (req, res) => {
+app.put('/api/showadmins/:username', (req, res) => {
   const { username } = req.params;
   const { newUsername, contact_number } = req.body;
 
-  try {
-    await prisma.showadmins.update({
-      where: { username },
-      data: { username: newUsername, contact_number },
-    });
+  const updateQuery = 'UPDATE showadmins SET username = ?, contact_number = ? WHERE username = ?';
+
+  pool.query(updateQuery, [newUsername, contact_number, username], (err, result) => {
+    if (err) {
+      console.error('Error updating showadmin username and contact number:', err);
+      res.status(500).json({ error: 'Failed to update showadmin username and contact number' });
+      return;
+    }
 
     res.json({ message: 'ShowAdmin username and contact number updated successfully' });
-  } catch (error) {
-    console.error('Error updating showadmin username and contact number:', error);
-    res.status(500).json({ error: 'Failed to update showadmin username and contact number' });
-  }
+  });
 });
 
-// Update password
 app.put('/api/updatePassword/:username', async (req, res) => {
   const { username } = req.params;
   const { newPassword, role } = req.body;
 
   const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-  try {
-    if (role === 'admin') {
-      await prisma.admins.update({
-        where: { username },
-        data: { password: hashedPassword },
-      });
-    } else if (role === 'showadmin') {
-      await prisma.showadmins.update({
-        where: { username },
-        data: { password: hashedPassword },
-      });
-    } else {
-      return res.status(400).json({ error: 'Invalid user role' });
+  let updateQuery;
+  if (role === 'admin') {
+    updateQuery = 'UPDATE admins SET password = ? WHERE username = ?';
+  } else if (role === 'showadmin') {
+    updateQuery = 'UPDATE showadmins SET password = ? WHERE username = ?';
+  } else {
+    return res.status(400).json({ error: 'Invalid user role' });
+  }
+
+  pool.query(updateQuery, [hashedPassword, username], (err) => {
+    if (err) {
+      console.error('Error updating password:', err);
+      res.status(500).json({ error: 'Failed to update password' });
+      return;
     }
 
     res.json({ message: 'Password updated successfully' });
-  } catch (error) {
-    console.error('Error updating password:', error);
-    res.status(500).json({ error: 'Failed to update password' });
-  }
+  });
 });
 
-// Fetch superadmin username
-app.get('/api/superadmin', async (req, res) => {
-  try {
-    const superadmin = await prisma.superadmin.findUnique({
-      select: { username: true },
-    });
+// Add a new API route to fetch the superadmin username
+app.get('/api/superadmin', (req, res) => {
+  const query = 'SELECT username FROM superadmin';
 
-    if (superadmin) {
-      res.json({ superadminUsername: superadmin.username });
+  pool.query(query, (err, results) => {
+    if (err) {
+      console.error('Error retrieving superadmin username:', err);
+      res.status(500).json({ error: 'Failed to retrieve superadmin username' });
+      return;
+    }
+
+    if (results.length > 0) {
+      const superadminUsername = results[0].username;
+      res.json({ superadminUsername });
     } else {
       res.status(404).json({ error: 'Superadmin username not found' });
     }
-  } catch (error) {
-    console.error('Error retrieving superadmin username:', error);
-    res.status(500).json({ error: 'Failed to retrieve superadmin username' });
-  }
+  });
 });
 
 app.listen(process.env.PORT || 8000, () => {
