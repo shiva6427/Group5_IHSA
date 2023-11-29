@@ -1,29 +1,28 @@
 require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
-const mysql = require('mysql');
+const { Pool } = require('pg');
 const path = require('path');
 const bcrypt = require('bcrypt');
-const { validationResult ,body} = require('express-validator');
+const { validationResult, body } = require('express-validator');
 const app = express();
 
-
-  app.use(cors({
-    origin: 'https://group5-ihsa-ln4empnxs-shiva6427s-projects.vercel.app',
-  }));
-
+app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, 'client/build')));
 
-const connection = mysql.createConnection({
-  host: process.env.DB_HOST,
-  user: process.env.DB_USER,
-  password: process.env.DB_PASSWORD,
-  database: process.env.DB_NAME,
-  port: process.env.DB_PORT
+const pool = new Pool({
+  user: process.env.POSTGRES_USER,
+  host: process.env.POSTGRES_HOST,
+  database: process.env.POSTGRES_DATABASE,
+  password: process.env.POSTGRES_PASSWORD,
+  port: process.env.DB_PORT,
+  ssl: {
+    rejectUnauthorized: false, 
+  },
 });
 
-connection.connect((err) => {
+pool.connect((err) => {
   if (err) {
     console.error('Error connecting to the database:', err);
     process.exit(1);
@@ -34,7 +33,7 @@ connection.connect((err) => {
 app.get('/api/events', (req, res) => {
   const query = 'SELECT * FROM events';
 
-  connection.query(query, (err, results) => {
+  pool.query(query, (err, results) => {
     if (err) {
       console.error('Error retrieving events:', err);
       res.status(500).json({ error: 'Failed to retrieve events' });
@@ -48,7 +47,7 @@ app.get('/api/events', (req, res) => {
 app.get('/api/schools', (req, res) => {
   const query = 'SELECT * FROM schools';
 
-  connection.query(query, (err, results) => {
+  pool.query(query, (err, results) => {
     if (err) {
       console.error('Error retrieving schools:', err);
       res.status(500).json({ error: 'Failed to retrieve schools' });
@@ -62,7 +61,7 @@ app.get('/api/schools', (req, res) => {
 app.get('/api/announcements', (req, res) => {
   const query = 'SELECT * FROM announcements';
 
-  connection.query(query, (err, results) => {
+  pool.query(query, (err, results) => {
     if (err) {
       console.error('Error retrieving announcements:', err);
       res.status(500).json({ error: 'Failed to retrieve announcements' });
@@ -82,13 +81,13 @@ app.post('/api/login', async (req, res) => {
 
   const [adminResults, showAdminResults, superadminResults] = await Promise.all([
     new Promise((resolve, reject) =>
-      connection.query(adminQuery, [username], (err, results) => (err ? reject(err) : resolve(results)))
+      pool.query(adminQuery, [username], (err, results) => (err ? reject(err) : resolve(results)))
     ),
     new Promise((resolve, reject) =>
-      connection.query(showAdminQuery, [username], (err, results) => (err ? reject(err) : resolve(results)))
+      pool.query(showAdminQuery, [username], (err, results) => (err ? reject(err) : resolve(results)))
     ),
     new Promise((resolve, reject) =>
-      connection.query(superadminQuery, [username], (err, results) => (err ? reject(err) : resolve(results)))
+      pool.query(superadminQuery, [username], (err, results) => (err ? reject(err) : resolve(results)))
     ),
   ]);
 
@@ -165,7 +164,7 @@ app.post('/api/login', async (req, res) => {
 app.get('/api/showadmins', (req, res) => {
   const query = 'SELECT username, contact_number FROM showadmins';
 
-  connection.query(query, (err, results) => {
+  pool.query(query, (err, results) => {
     if (err) {
       console.error('Error retrieving show admins:', err);
       res.status(500).json({ error: 'Failed to retrieve show admins' });
@@ -179,7 +178,7 @@ app.get('/api/showadmins', (req, res) => {
 app.get('/api/admins', (req, res) => {
   const query = 'SELECT username, contact_number FROM admins';
 
-  connection.query(query, (err, results) => {
+  pool.query(query, (err, results) => {
     if (err) {
       console.error('Error retrieving admins:', err);
       res.status(500).json({ error: 'Failed to retrieve admins' });
@@ -194,7 +193,7 @@ app.put('/api/showadmins/:username', async (req, res) => {
   const { username } = req.params;
   const { contact_number } = req.body;
   const showAdminQuery = 'SELECT * FROM showadmins WHERE username = ?';
-  connection.query(showAdminQuery, [username], (err, results) => {
+  pool.query(showAdminQuery, [username], (err, results) => {
     if (err || results.length === 0) {
       console.error('Error retrieving show admin:', err);
       res.status(404).json({ error: 'User not found' });
@@ -204,7 +203,7 @@ app.put('/api/showadmins/:username', async (req, res) => {
     const { password } = results[0];
 
     const deleteShowAdminQuery = 'DELETE FROM showadmins WHERE username = ?';
-    connection.query(deleteShowAdminQuery, [username], (err) => {
+    pool.query(deleteShowAdminQuery, [username], (err) => {
       if (err) {
         console.error('Error deleting show admin:', err);
         res.status(500).json({ error: 'Failed to update admin status' });
@@ -212,7 +211,7 @@ app.put('/api/showadmins/:username', async (req, res) => {
       }
 
       const addAdminQuery = 'INSERT INTO admins (username, password, contact_number) VALUES (?, ?, ?)';
-      connection.query(addAdminQuery, [username, password, contact_number], (err) => {
+      pool.query(addAdminQuery, [username, password, contact_number], (err) => {
         if (err) {
           console.error('Error adding admin:', err);
           res.status(500).json({ error: 'Failed to update admin status' });
@@ -231,10 +230,10 @@ app.get('/api/users', async (req, res) => {
 
   const [adminResults, showAdminResults] = await Promise.all([
     new Promise((resolve, reject) => 
-      connection.query(adminQuery, (err, results) => (err ? reject(err) : resolve(results)))
+      pool.query(adminQuery, (err, results) => (err ? reject(err) : resolve(results)))
     ),
     new Promise((resolve, reject) => 
-      connection.query(showAdminQuery, (err, results) => (err ? reject(err) : resolve(results)))
+      pool.query(showAdminQuery, (err, results) => (err ? reject(err) : resolve(results)))
     ),
   ]);
 
@@ -269,7 +268,7 @@ app.post(
       return;
     }
 
-    connection.query(updateQuery, [hashedPassword, username], (err) => {
+    pool.query(updateQuery, [hashedPassword, username], (err) => {
       if (err) {
         console.error('Error updating password:', err);
         res.status(500).json({ error: 'Failed to update password' });
@@ -288,7 +287,7 @@ app.put('/api/makeAdmin/:username', async (req, res) => {
 
   // First, we need to get the password of the showadmin who is being made an admin
   const showAdminQuery = 'SELECT * FROM showadmins WHERE username = ?';
-  connection.query(showAdminQuery, [username], (err, results) => {
+  pool.query(showAdminQuery, [username], (err, results) => {
     if (err || results.length === 0) {
       console.error('Error retrieving show admin:', err);
       res.status(404).json({ error: 'User not found' });
@@ -299,7 +298,7 @@ app.put('/api/makeAdmin/:username', async (req, res) => {
 
     // Delete the user from the showadmins table
     const deleteShowAdminQuery = 'DELETE FROM showadmins WHERE username = ?';
-    connection.query(deleteShowAdminQuery, [username], (err) => {
+    pool.query(deleteShowAdminQuery, [username], (err) => {
       if (err) {
         console.error('Error deleting show admin:', err);
         res.status(500).json({ error: 'Failed to update admin status' });
@@ -308,7 +307,7 @@ app.put('/api/makeAdmin/:username', async (req, res) => {
 
       // Add the user to the admins table, including the contact_number
       const addAdminQuery = 'INSERT INTO admins (username, password, contact_number) VALUES (?, ?, ?)';
-      connection.query(addAdminQuery, [username, password, contact_number], (err) => {
+      pool.query(addAdminQuery, [username, password, contact_number], (err) => {
         if (err) {
           console.error('Error adding admin:', err);
           res.status(500).json({ error: 'Failed to update admin status' });
@@ -325,7 +324,7 @@ app.put('/api/removeAdmin/:username', async (req, res) => {
   const { username } = req.params;
 
   const deleteAdminQuery = 'DELETE FROM admins WHERE username = ?';
-  connection.query(deleteAdminQuery, [username], (err) => {
+  pool.query(deleteAdminQuery, [username], (err) => {
     if (err) {
       console.error('Error deleting admin:', err);
       res.status(500).json({ error: 'Failed to remove admin' });
@@ -362,7 +361,7 @@ app.post('/api/createUser',
       return;
     }
 
-    connection.query(insertQuery, [username, hashedPassword, contact_number], (err) => {
+    pool.query(insertQuery, [username, hashedPassword, contact_number], (err) => {
       if (err) {
         console.error('Error creating user:', err);
         res.status(500).json({ error: 'Failed to create user' });
@@ -379,7 +378,7 @@ app.put('/api/removeShowAdmin/:username', async (req, res) => {
   const { username } = req.params;
 
   const deleteShowAdminQuery = 'DELETE FROM showadmins WHERE username = ?';
-  connection.query(deleteShowAdminQuery, [username], (err) => {
+  pool.query(deleteShowAdminQuery, [username], (err) => {
     if (err) {
       console.error('Error deleting show admin:', err);
       res.status(500).json({ error: 'Failed to remove show admin' });
@@ -396,7 +395,7 @@ app.put('/api/schools/:id', (req, res) => {
 
   const updateQuery = 'UPDATE schools SET latitude = ?, longitude = ? WHERE id = ?';
 
-  connection.query(updateQuery, [latitude, longitude, id], (err, results) => {
+  pool.query(updateQuery, [latitude, longitude, id], (err, results) => {
     if (err) {
       console.error('Error updating latitude and longitude:', err);
       res.status(500).json({ error: 'Failed to update latitude and longitude' });
@@ -413,7 +412,7 @@ app.delete('/api/schools/:id', (req, res) => {
 
   const deleteQuery = 'DELETE FROM schools WHERE id = ?';
 
-  connection.query(deleteQuery, [id], (err, results) => {
+  pool.query(deleteQuery, [id], (err, results) => {
     if (err) {
       console.error('Error removing college:', err);
       res.status(500).json({ error: 'Failed to remove college' });
@@ -441,7 +440,7 @@ app.post('/api/schools', (req, res) => {
 
   const insertQuery = 'INSERT INTO schools (college_name, state_name, active_riders, is_anchor_school, region_number, zone_number, latitude, longitude, zone_chair, region_head) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
-  connection.query(
+  pool.query(
     insertQuery,
     [
       college_name,
@@ -486,7 +485,7 @@ app.post('/api/events', async (req, res) => {
 
   const insertQuery = 'INSERT INTO events (image, name, venue, region, zone, discipline, description, start_date, start_time, end_date, end_time, time_zone, gallery) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
-  connection.query(
+  pool.query(
     insertQuery,
     [
       image,
@@ -522,7 +521,7 @@ app.put('/api/events/:id', async (req, res) => {
 
   const updateQuery = 'UPDATE events SET ? WHERE id = ?';
 
-  connection.query(updateQuery, [updatedEvent, id], (err, results) => {
+  pool.query(updateQuery, [updatedEvent, id], (err, results) => {
     if (err) {
       console.error('Error updating event:', err);
       res.status(500).json({ error: 'Failed to update event' });
@@ -539,7 +538,7 @@ app.delete('/api/events/:id', (req, res) => {
 
   const deleteQuery = 'DELETE FROM events WHERE id = ?';
 
-  connection.query(deleteQuery, [id], (err, results) => {
+  pool.query(deleteQuery, [id], (err, results) => {
     if (err) {
       console.error('Error deleting event:', err);
       res.status(500).json({ error: 'Failed to delete event' });
@@ -556,7 +555,7 @@ app.post('/api/announcements', (req, res) => {
 
   const insertQuery = 'INSERT INTO announcements (title, content, date, time) VALUES (?, ?, ?, ?)';
 
-  connection.query(insertQuery, [title, content, date, time], (err, results) => {
+  pool.query(insertQuery, [title, content, date, time], (err, results) => {
     if (err) {
       console.error('Error creating announcement:', err);
       res.status(500).json({ error: 'Failed to create announcement' });
@@ -573,7 +572,7 @@ app.put('/api/announcements/:id', async (req, res) => {
 
   const updateQuery = 'UPDATE announcements SET ? WHERE id = ?';
 
-  connection.query(updateQuery, [updatedAnnouncement, id], (err, results) => {
+  pool.query(updateQuery, [updatedAnnouncement, id], (err, results) => {
     if (err) {
       console.error('Error updating announcement:', err);
       res.status(500).json({ error: 'Failed to update announcement' });
@@ -589,7 +588,7 @@ app.delete('/api/announcements/:id', (req, res) => {
 
   const deleteQuery = 'DELETE FROM announcements WHERE id = ?';
 
-  connection.query(deleteQuery, [id], (err, results) => {
+  pool.query(deleteQuery, [id], (err, results) => {
     if (err) {
       console.error('Error deleting announcement:', err);
       res.status(500).json({ error: 'Failed to delete announcement' });
@@ -607,7 +606,7 @@ app.put('/api/admins/:username', (req, res) => {
 
   const updateQuery = 'UPDATE admins SET username = ?, contact_number = ? WHERE username = ?';
 
-  connection.query(updateQuery, [newUsername, contact_number, username], (err, result) => {
+  pool.query(updateQuery, [newUsername, contact_number, username], (err, result) => {
     if (err) {
       console.error('Error updating admin username and contact number:', err);
       res.status(500).json({ error: 'Failed to update admin username and contact number' });
@@ -624,7 +623,7 @@ app.put('/api/showadmins/:username', (req, res) => {
 
   const updateQuery = 'UPDATE showadmins SET username = ?, contact_number = ? WHERE username = ?';
 
-  connection.query(updateQuery, [newUsername, contact_number, username], (err, result) => {
+  pool.query(updateQuery, [newUsername, contact_number, username], (err, result) => {
     if (err) {
       console.error('Error updating showadmin username and contact number:', err);
       res.status(500).json({ error: 'Failed to update showadmin username and contact number' });
@@ -650,7 +649,7 @@ app.put('/api/updatePassword/:username', async (req, res) => {
     return res.status(400).json({ error: 'Invalid user role' });
   }
 
-  connection.query(updateQuery, [hashedPassword, username], (err) => {
+  pool.query(updateQuery, [hashedPassword, username], (err) => {
     if (err) {
       console.error('Error updating password:', err);
       res.status(500).json({ error: 'Failed to update password' });
@@ -665,7 +664,7 @@ app.put('/api/updatePassword/:username', async (req, res) => {
 app.get('/api/superadmin', (req, res) => {
   const query = 'SELECT username FROM superadmin';
 
-  connection.query(query, (err, results) => {
+  pool.query(query, (err, results) => {
     if (err) {
       console.error('Error retrieving superadmin username:', err);
       res.status(500).json({ error: 'Failed to retrieve superadmin username' });
