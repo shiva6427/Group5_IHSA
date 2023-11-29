@@ -27,19 +27,14 @@ const HomePage = ({ userRole, handleLogout }) => {
 
   useEffect(() => {
     loadEvents();
-  
+
     // Fetch announcements from the server
     axios.get('http://localhost:8000/api/announcements')
       .then(response => {
-        if (Array.isArray(response.data)) {
-          setAnnouncements(response.data);
-        } else {
-          console.error('Invalid format for announcements:', response.data);
-        }
+        setAnnouncements(response.data);
       })
       .catch(error => console.log(error));
   }, []);
-  
 
   const loadEvents = async () => {
     try {
