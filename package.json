@@ -2,7 +2,7 @@
   "name": "rihs",
   "version": "0.1.0",
   "private": true,
-  "proxy": "http://localhost:8000",
+  "proxy": "http://localhost:8080",
   "dependencies": {
     "@emotion/react": "^11.11.1",
     "@emotion/styled": "^11.11.0",
@@ -70,9 +70,7 @@
     "xlsx": "^0.18.5"
   },
   "scripts": {
-    "start": "concurrently \"npm run start:frontend\" \"npm run start:backend\"",
-    "start:frontend": "react-scripts start --host 0.0.0.0",
-    "start:backend": "cd src && PORT=8001 node server.js",
+    "start": "react-scripts start",
     "build": "react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject"
