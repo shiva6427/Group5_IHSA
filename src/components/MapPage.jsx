@@ -289,7 +289,7 @@ const handleButtonClick = () => {
   return (
     <div className="map-page">
       <NavBar userRole={userRole} handleLogout={handleLogout} />
-      {userRole === 'admin' && (
+      {(userRole === 'admin' || userRole === 'superadmin') && (
          <div
          className={`side-button-wrapper ${isButtonHovered ? 'hovered' : ''}`}
          onClick={handleButtonClick}
@@ -297,7 +297,6 @@ const handleButtonClick = () => {
          onMouseLeave={handleButtonHover}
        >
         <button onClick={handleCardToggle} className={`side-button ${isButtonHovered ? 'hovered' : ''}`}>
-         
            <div className="admin-panel-header">
       <FontAwesomeIcon icon={faCog} className="admin-icon" />
       <h2 className="admin-title">Admin Panel</h2>
